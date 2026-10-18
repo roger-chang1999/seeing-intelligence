@@ -8,13 +8,22 @@
              + Σ 彎折力度 s_i × ReLU(時間 − 折點 c_i)
 
 每個神經元 = 一個彎折：從時間 c_i 開始，斜率多改變 s_i。
+
+資料分兩份：
+    練習資料：10 筆，模型只看得到這些
+    實戰資料：40 筆，按下「進入實戰」才揭曉
+固定用 seed 5 —— 從 60 組裡驗證過，從預設起點訓練時：
+0–2 個神經元兩邊都爛（欠擬合）、3 個剛好、4 個以上練習 0 分錯但實戰沒變好（背答案）。
 """
 
 import numpy as np
 
 X_MIN, X_MAX = 8.0, 22.0
 Y_MIN, Y_MAX = 0.0, 110.0
-MAX_NEURONS = 6
+MAX_NEURONS = 12
+MANUAL_NEURONS = 6  # 超過這個數量的神經元只能交給機器學，不顯示滑桿
+DATA_SEED = 5
+STEPS = 4000
 
 
 def true_f(x):
@@ -23,21 +32,31 @@ def true_f(x):
     return 15 + lunch + dinner
 
 
-def make_data(n=36, seed=7):
+def make_data(seed=DATA_SEED, n_train=10, n_test=40, noise=12):
     rng = np.random.default_rng(seed)
-    x = np.sort(rng.uniform(X_MIN, X_MAX, n))
-    y = np.clip(true_f(x) + rng.normal(0, 5, n), 0, None)
-    return x, y
+    x = np.sort(np.linspace(8.4, 21.6, n_train) + rng.uniform(-0.4, 0.4, n_train))
+    y = np.clip(true_f(x) + rng.normal(0, noise, n_train), 0, None)
+    xt = np.linspace(8.2, 21.8, n_test)
+    yt = np.clip(true_f(xt) + rng.normal(0, 3, n_test), 0, None)
+    return x, y, xt, yt
 
 
-X, Y = make_data()
+X, Y, XT, YT = make_data()
+
+
+def default_bends():
+    """前三個折點分散在全天；之後的放在練習點之間，讓多神經元時背得起來。"""
+    mids = list((X[1:] + X[:-1]) / 2)
+    first = [11.0, 15.0, 19.0]
+    out = first + [m for m in mids if all(abs(m - f) > 0.5 for f in first)]
+    while len(out) < MAX_NEURONS:
+        out.append(mids[len(out) % len(mids)])
+    return [round(float(v), 2) for v in out[:MAX_NEURONS]]
 
 
 def default_params():
     """一開始只有一條直線，所有神經元的力度都是 0（加進來不改變任何東西）。"""
-    # 依序加入的折點先分散在全天，避免擠在一起讓梯度下降卡住
-    cs = [11.0, 15.0, 19.0, 13.0, 17.0, 21.0]
-    return {"b": 30.0, "a": 2.0, "c": cs, "s": [0.0] * MAX_NEURONS}
+    return {"b": 30.0, "a": 2.0, "c": default_bends(), "s": [0.0] * MAX_NEURONS}
 
 
 def predict(x, p, n):
@@ -48,11 +67,12 @@ def predict(x, p, n):
     return y
 
 
-def rmse(p, n):
-    return float(np.sqrt(np.mean((predict(X, p, n) - Y) ** 2)))
+def rmse(p, n, test=False):
+    x, y = (XT, YT) if test else (X, Y)
+    return float(np.sqrt(np.mean((predict(x, p, n) - y) ** 2)))
 
 
-def train(p, n, steps=800, n_frames=60):
+def train(p, n, steps=STEPS, n_frames=60):
     """從學員目前的參數出發做梯度下降（Adam），回傳動畫用的參數快照。"""
     b, a = float(p["b"]), float(p["a"])
     c = np.array(p["c"][:n], dtype=float)
@@ -73,7 +93,7 @@ def train(p, n, steps=800, n_frames=60):
         full_c = list(c) + list(p["c"][n:])
         full_s = list(s) + list(p["s"][n:])
         q = {"b": b, "a": a, "c": [float(v) for v in full_c], "s": [float(v) for v in full_s]}
-        return {"params": q, "rmse": rmse(q, n)}
+        return {"params": q, "train": rmse(q, n), "test": rmse(q, n, test=True)}
 
     # 前段變化最劇烈，快照取樣用平方分布讓動畫前段細、後段疏
     keep = sorted({int(round((i / (n_frames - 1)) ** 2 * steps)) for i in range(n_frames)})
@@ -94,3 +114,8 @@ def train(p, n, steps=800, n_frames=60):
         if t in keep:
             frames.append(snapshot())
     return frames
+
+
+def sweep():
+    """講師用：0 到 MAX_NEURONS 個神經元，各從預設起點訓練一次，回傳整張成績單。"""
+    return [{"n": n, **train(default_params(), n, n_frames=2)[-1]} for n in range(MAX_NEURONS + 1)]
