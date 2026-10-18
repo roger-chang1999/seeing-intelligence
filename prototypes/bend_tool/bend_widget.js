@@ -1,7 +1,8 @@
-// 版本 B 的瀏覽器端：畫面與滑桿都在學員電腦上即時重畫，訓練交給伺服器的 Python。
-// Gradio 的 js_on_load 會提供 element、props、server 三個變數。
+// 彎折工具的畫面與互動：全部在瀏覽器裡執行，不需要伺服器。
+// 需要 trainer.js（train / learn / sweep）與全域的 DATA。
 
-const D = props.data;
+const element = document.querySelector(".bend");
+const D = DATA;
 const p = JSON.parse(JSON.stringify(D.params));
 let n = 0;
 let showResid = true;
@@ -210,7 +211,14 @@ $(".resid").addEventListener("change", (e) => { showResid = e.target.checked; dr
 $(".phase .practice").addEventListener("click", () => { exam = false; syncAll(); draw(); });
 $(".phase .exam").addEventListener("click", () => { exam = true; syncAll(); draw(); });
 
-// ---------- 讓機器自己學：伺服器的 Python 訓練，瀏覽器在影格之間平滑內插 ----------
+// ---------- 讓機器自己學：訓練完再把快照之間平滑內插成動畫 ----------
+const nextFrame = () => new Promise((ok) => setTimeout(ok, 30));  // 先讓按鈕文字更新再開始算
+let toastTimer;
+function toast(text) {
+  const t = $(".toast");
+  t.textContent = text; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), 4000);
+}
 function setParams(q) {
   p.b = q.b; p.a = q.a;
   for (let k = 0; k < D.maxN; k++) { p.c[k] = q.c[k]; p.s[k] = q.s[k]; }
@@ -218,12 +226,15 @@ function setParams(q) {
 $(".learn").addEventListener("click", async () => {
   busy = true; syncAll();
   $(".learn").textContent = "機器學習中…";
-  const frames = await server.train({ params: p, n });
+  await nextFrame();
+  const { frames, restarted } = learn(p, n);
+  if (restarted) toast("原本的起點會讓機器卡住，它換了一個起點重新學");
   const total = 2500, t0 = performance.now();
   const lerp = (u, v, t) => u + (v - u) * t;
   await new Promise((done) => {
     function tick(now) {
-      const f = Math.min((now - t0) / total, 1) * (frames.length - 1);
+      // requestAnimationFrame 的時間戳可能早於 t0，夾在 0 以上避免取到負的影格
+      const f = Math.min(Math.max((now - t0) / total, 0), 1) * (frames.length - 1);
       const i = Math.min(Math.floor(f), frames.length - 2), t = f - i;
       const A = frames[i].params, B = frames[i + 1].params;
       p.b = lerp(A.b, B.b, t); p.a = lerp(A.a, B.a, t);
@@ -243,7 +254,8 @@ $(".learn").addEventListener("click", async () => {
 $(".sweep").addEventListener("click", async () => {
   busy = true; syncAll();
   $(".sweep").textContent = "掃描中…";
-  const results = await server.sweep({});
+  await nextFrame();
+  const results = sweep();
   for (const r of results) {
     records[r.n] = { train: r.train, test: r.test, params: r.params };
     drawCard();

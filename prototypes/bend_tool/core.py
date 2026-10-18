@@ -116,6 +116,25 @@ def train(p, n, steps=STEPS, n_frames=60):
     return frames
 
 
+def learn(p, n):
+    """「讓機器自己學」：從學員當下的狀態學，但避免卡在局部最小值。
+
+    1. 折點跑到所有練習點右邊的神經元梯度永遠是 0（死掉了），先重設
+    2. 同時從預設起點再學一次，取練習誤差較低的那次
+    回傳 (frames, restarted)；restarted 表示採用了預設起點那次。
+    """
+    q = {"b": p["b"], "a": p["a"], "c": list(p["c"]), "s": list(p["s"])}
+    dflt = default_params()
+    for i in range(n):
+        if q["c"][i] > X.max():
+            q["c"][i], q["s"][i] = dflt["c"][i], 0.0
+    mine, fresh = train(q, n), train(dflt, n)
+    if fresh[-1]["train"] < mine[-1]["train"] - 0.5:
+        start = {"params": p, "train": rmse(p, n), "test": rmse(p, n, test=True)}
+        return [start] + fresh, True
+    return mine, False
+
+
 def sweep():
     """講師用：0 到 MAX_NEURONS 個神經元，各從預設起點訓練一次，回傳整張成績單。"""
     return [{"n": n, **train(default_params(), n, n_frames=2)[-1]} for n in range(MAX_NEURONS + 1)]

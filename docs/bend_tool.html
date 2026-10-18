@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>彎折工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body { margin:0; background:#fcfcfb; color:#0b0b0b; font-family:'Noto Sans TC','Noto Sans CJK TC','Microsoft JhengHei','PingFang TC',sans-serif; }
+main { max-width:1280px; margin:0 auto; padding:24px 16px 48px; }
+h1 { font-size:24px; margin:0 0 6px; }
+.lede { color:#52514e; font-size:15px; margin:0 0 20px; line-height:1.6; }
+
+.bend { display:flex; gap:24px; flex-wrap:wrap; font-family:'Noto Sans TC','Noto Sans CJK TC','Microsoft JhengHei','PingFang TC',sans-serif; color:#0b0b0b; }
+.bend .plot { flex:3 1 520px; min-width:0; }
+.bend .side { flex:2 1 300px; display:flex; flex-direction:column; gap:12px; }
+.bend .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 10px; }
+.bend .scores { display:flex; gap:20px; flex-wrap:wrap; font-size:17px; font-weight:600; font-variant-numeric:tabular-nums; }
+.bend .sw { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.bend .sw.train { background:#7a7975; }
+.bend .sw.test { background:#1baf7a; }
+.bend .phase { display:flex; border:1px solid #d5d4cf; border-radius:8px; overflow:hidden; }
+.bend .phase button { border:none; border-radius:0; padding:8px 16px; background:#fff; color:#52514e; }
+.bend .phase button.on { background:#0b0b0b; color:#fff; }
+.bend .phase .exam.on { background:#1baf7a; }
+.bend .canvas-wrap { position:relative; }
+.bend canvas { display:block; touch-action:none; border-radius:8px; }
+.bend .card-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin:18px 0 4px; font-size:14px; color:#52514e; }
+.bend .card-title { font-size:16px; font-weight:600; color:#0b0b0b; }
+.bend .card-hint { margin-left:auto; font-size:12px; }
+.bend .tip { position:absolute; display:none; pointer-events:none; background:#0b0b0b; color:#fff;
+  font-size:13px; padding:6px 10px; border-radius:6px; white-space:nowrap; z-index:2; }
+.bend .row { display:grid; grid-template-columns:1fr auto; gap:2px 8px; font-size:14px; color:#52514e; }
+.bend .row input { grid-column:1 / -1; width:100%; accent-color:#2a78d6; }
+.bend .val { font-variant-numeric:tabular-nums; color:#0b0b0b; }
+.bend .neuron { border-left:3px solid #eb6834; padding:6px 0 6px 12px; margin-top:10px; display:flex; flex-direction:column; gap:8px; }
+.bend .ntitle { font-weight:600; font-size:14px; }
+.bend .neuron .row input { accent-color:#eb6834; }
+.bend .auto-note { margin-top:10px; padding:8px 12px; border-left:3px solid #eb6834; background:#fdf1ec; font-size:14px; }
+.bend .count-row { font-size:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.bend button { font:inherit; border:1px solid #d5d4cf; background:#fff; border-radius:8px; padding:6px 12px; cursor:pointer; }
+.bend button:disabled { opacity:.4; cursor:default; }
+.bend .learn { background:#2a78d6; color:#fff; border:none; font-size:16px; font-weight:600; padding:12px; }
+.bend .sweep { font-size:13px; color:#52514e; }
+.bend .check { font-size:14px; color:#52514e; }
+.bend .toast { display:none; position:absolute; left:50%; top:16px; transform:translateX(-50%); z-index:3;
+  background:#fdf1ec; border-left:3px solid #eb6834; color:#0b0b0b; font-size:14px; padding:8px 14px; border-radius:6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>彎折工具</h1>
+  <p class="lede">一家店每個時段的來客數。先用<b>練習資料</b>（灰點）讓藍線貼近；再按<b>進入實戰</b>，看模型遇到沒看過的資料（綠點）表現如何。橘色彎折點可以直接用滑鼠拖。</p>
+
+<div class="bend">
+  <div class="plot">
+    <div class="topbar">
+      <div class="scores">
+        <div class="score-train"><i class="sw train"></i>練習：平均猜錯 <b>0</b> 人</div>
+        <div class="score-test"><i class="sw test"></i>實戰：平均猜錯 <b>0</b> 人</div>
+      </div>
+      <div class="phase"><button class="practice on">練習</button><button class="exam">進入實戰</button></div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas class="main"></canvas>
+      <div class="card-head">
+        <span class="card-title">成績單</span>
+        <span class="legend"><i class="sw train"></i>練習</span>
+        <span class="legend legend-test"><i class="sw test"></i>實戰</span>
+        <span class="card-hint">每按一次「讓機器自己學」就記一筆</span>
+      </div>
+      <canvas class="card"></canvas>
+      <div class="tip"></div>
+      <div class="toast"></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="controls"></div>
+    <div class="count-row">
+      神經元（彎折）數量 <b class="count">0</b>
+      <button class="remove">－ 拿掉一個</button><button class="add">＋ 加一個</button>
+    </div>
+    <label class="check"><input type="checkbox" class="resid" checked> <span class="resid-label"></span></label>
+    <button class="learn">讓機器自己學</button>
+    <button class="sweep">講師用：一鍵掃描 0–12 個神經元</button>
+  </div>
+</div>
+
+</main>
+<script>
+const DATA = {"x": [8.644002338996305, 10.113019298455862, 11.345593782167047, 12.628641104070514, 13.909811228571993, 15.64002843796175, 17.126778564336, 18.302886821788626, 19.772339501915067, 21.999340892052057], "y": [18.304187578490776, 4.379261233908117, 39.20881259280017, 83.5343430270966, 27.19278898723989, 0.0, 37.445763426306684, 64.59995738664716, 55.833121411957435, 10.42813896351006], "xt": [8.2, 8.548717948717949, 8.897435897435896, 9.246153846153845, 9.594871794871795, 9.943589743589744, 10.292307692307691, 10.64102564102564, 10.98974358974359, 11.338461538461537, 11.687179487179487, 12.035897435897436, 12.384615384615383, 12.733333333333334, 13.082051282051282, 13.430769230769231, 13.77948717948718, 14.128205128205128, 14.476923076923077, 14.825641025641026, 15.174358974358974, 15.523076923076923, 15.871794871794872, 16.220512820512823, 16.56923076923077, 16.91794871794872, 17.266666666666666, 17.615384615384613, 17.964102564102564, 18.312820512820515, 18.661538461538463, 19.01025641025641, 19.358974358974358, 19.70769230769231, 20.056410256410256, 20.405128205128207, 20.753846153846155, 21.102564102564102, 21.45128205128205, 21.8], "yt": [12.864312920091319, 16.680758546852267, 14.897340709122725, 13.546602729866446, 17.220487708437567, 20.193419509925885, 16.45564700630726, 27.285525730577156, 35.17629157768443, 49.930875528010674, 58.2057439214005, 69.1926093314467, 68.78825526592337, 60.56706156754189, 46.56439812832163, 36.25594129032644, 24.297447335172265, 17.042519649077313, 18.280721045470337, 12.748894085159794, 19.21606864290997, 18.285023866912503, 11.482873406825533, 21.023958817660457, 21.715861125606775, 32.64579886080908, 43.071835011982586, 49.495199037151814, 67.57946346543116, 78.03451901616188, 87.36373626247385, 80.25723109761898, 79.17130865544354, 62.440172876504285, 51.78944266716521, 38.06533237335269, 35.103096411488664, 25.528672566715734, 26.788896946108316, 19.006794284278072], "xmin": 8.0, "xmax": 22.0, "ymin": 0.0, "ymax": 110.0, "maxN": 12, "manualN": 6, "params": {"b": 30.0, "a": 2.0, "c": [11.0, 15.0, 19.0, 9.38, 11.99, 13.27, 16.38, 17.71, 20.89, 9.38, 10.73, 11.99], "s": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}};
+// 訓練：core.py 的 train / learn / sweep 移植到瀏覽器，同一套演算法（Adam 梯度下降）。
+// 需要全域的 DATA（由 build.py 從 core.py 產生）。
+
+const STEPS = 4000;
+
+function predictWith(x, q, k) {
+  let y = q.b + q.a * (x - DATA.xmin);
+  for (let i = 0; i < k; i++) y += q.s[i] * Math.max(x - q.c[i], 0);
+  return y;
+}
+
+function rmseWith(xs, ys, q, k) {
+  let s = 0;
+  for (let i = 0; i < xs.length; i++) { const r = predictWith(xs[i], q, k) - ys[i]; s += r * r; }
+  return Math.sqrt(s / xs.length);
+}
+
+const clone = (q) => ({ b: q.b, a: q.a, c: q.c.slice(), s: q.s.slice() });
+
+function snapshot(q, k) {
+  return { params: clone(q), train: rmseWith(DATA.x, DATA.y, q, k), test: rmseWith(DATA.xt, DATA.yt, q, k) };
+}
+
+// 從 p 出發訓練前 n 個神經元，回傳動畫用的參數快照
+function train(p, n, steps = STEPS, nFrames = 60) {
+  const q = clone(p);
+  const X = DATA.x, Y = DATA.y, N = X.length;
+  const lr = { b: 1.0, a: 0.3, c: 0.05, s: 0.4 };
+  const b1 = 0.9, b2 = 0.999, eps = 1e-8;
+  const m = { b: 0, a: 0, c: new Array(n).fill(0), s: new Array(n).fill(0) };
+  const v = { b: 0, a: 0, c: new Array(n).fill(0), s: new Array(n).fill(0) };
+
+  // 前段變化最劇烈，快照取樣用平方分布讓動畫前段細、後段疏
+  const keep = new Set();
+  for (let i = 0; i < nFrames; i++) keep.add(Math.round((i / (nFrames - 1)) ** 2 * steps));
+  const frames = keep.has(0) ? [snapshot(q, n)] : [];
+
+  const gc = new Array(n), gs = new Array(n), r = new Array(N);
+  for (let t = 1; t <= steps; t++) {
+    let gb = 0, ga = 0;
+    gc.fill(0); gs.fill(0);
+    for (let j = 0; j < N; j++) {
+      r[j] = predictWith(X[j], q, n) - Y[j];
+      gb += 2 * r[j] / N;
+      ga += 2 * r[j] * (X[j] - DATA.xmin) / N;
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < N; j++) {
+        const h = X[j] - q.c[i];
+        if (h > 0) { gs[i] += 2 * r[j] * h / N; gc[i] -= 2 * r[j] * q.s[i] / N; }
+      }
+    }
+    const c1 = 1 - b1 ** t, c2 = 1 - b2 ** t;
+    const step = (g, key, idx) => {
+      if (idx === undefined) {
+        m[key] = b1 * m[key] + (1 - b1) * g; v[key] = b2 * v[key] + (1 - b2) * g * g;
+        return lr[key] * (m[key] / c1) / (Math.sqrt(v[key] / c2) + eps);
+      }
+      m[key][idx] = b1 * m[key][idx] + (1 - b1) * g; v[key][idx] = b2 * v[key][idx] + (1 - b2) * g * g;
+      return lr[key] * (m[key][idx] / c1) / (Math.sqrt(v[key][idx] / c2) + eps);
+    };
+    q.b -= step(gb, "b"); q.a -= step(ga, "a");
+    for (let i = 0; i < n; i++) {
+      q.s[i] -= step(gs[i], "s", i);
+      q.c[i] = Math.min(DATA.xmax, Math.max(DATA.xmin, q.c[i] - step(gc[i], "c", i)));
+    }
+    if (keep.has(t)) frames.push(snapshot(q, n));
+  }
+  return frames;
+}
+
+// 「讓機器自己學」：從學員當下的狀態學，但避免卡在局部最小值（與 core.learn 相同）
+function learn(p, n) {
+  const q = clone(p), dflt = clone(DATA.params);
+  const xmax = Math.max(...DATA.x);
+  for (let i = 0; i < n; i++) if (q.c[i] > xmax) { q.c[i] = dflt.c[i]; q.s[i] = 0; }
+  const mine = train(q, n), fresh = train(dflt, n);
+  if (fresh[fresh.length - 1].train < mine[mine.length - 1].train - 0.5) {
+    return { frames: [snapshot(p, n), ...fresh], restarted: true };
+  }
+  return { frames: mine, restarted: false };
+}
+
+// 講師用：0 到 maxN 個神經元，各從預設起點訓練一次
+function sweep() {
+  const out = [];
+  for (let n = 0; n <= DATA.maxN; n++) out.push({ n, ...train(DATA.params, n, STEPS, 2).pop() });
+  return out;
+}
+
+// 彎折工具的畫面與互動：全部在瀏覽器裡執行，不需要伺服器。
+// 需要 trainer.js（train / learn / sweep）與全域的 DATA。
+
+const element = document.querySelector(".bend");
+const D = DATA;
+const p = JSON.parse(JSON.stringify(D.params));
+let n = 0;
+let showResid = true;
+let exam = false;      // false = 練習，true = 實戰（揭曉實戰資料）
+let busy = false;
+const records = {};    // 成績單：records[神經元數] = { train, test, params }
+
+const $ = (sel) => element.querySelector(sel);
+const canvas = $(".main");
+const ctx = canvas.getContext("2d");
+const card = $(".card");
+const cctx = card.getContext("2d");
+const tip = $(".tip");
+const H = 400, CH = 210;
+const PAD = { l: 52, r: 18, t: 16, b: 40 };
+const CPAD = { l: 52, r: 18, t: 28, b: 40 };
+const FONT = "'Noto Sans TC', 'Noto Sans CJK TC', 'Microsoft JhengHei', 'PingFang TC', sans-serif";
+const COLOR = {
+  surface: "#fcfcfb", ink: "#0b0b0b", ink2: "#52514e", grid: "#e6e5e0", band: "rgba(42,120,214,0.07)",
+  curve: "#2a78d6", bend: "#eb6834",
+  train: "#7a7975", trainResid: "rgba(227,73,72,0.45)",
+  test: "#1baf7a", testResid: "rgba(27,175,122,0.45)",
+};
+
+// ---------- 模型（和 core.py 同一條公式） ----------
+function predict(x, q = p, k = n) {
+  let y = q.b + q.a * (x - D.xmin);
+  for (let i = 0; i < k; i++) y += q.s[i] * Math.max(x - q.c[i], 0);
+  return y;
+}
+function rmse(xs, ys) {
+  let s = 0;
+  xs.forEach((x, i) => { const r = predict(x) - ys[i]; s += r * r; });
+  return Math.sqrt(s / xs.length);
+}
+
+// ---------- 主圖座標 ----------
+let W = 600, CW = 600;
+const sx = (x) => PAD.l + ((x - D.xmin + 0.3) / (D.xmax - D.xmin + 0.6)) * (W - PAD.l - PAD.r);
+const sy = (y) => PAD.t + (1 - (y - D.ymin) / (D.ymax - D.ymin)) * (H - PAD.t - PAD.b);
+const invx = (px) => D.xmin - 0.3 + ((px - PAD.l) / (W - PAD.l - PAD.r)) * (D.xmax - D.xmin + 0.6);
+
+function setup(cv, c2, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function resize() {
+  W = canvas.parentElement.clientWidth; CW = card.parentElement.clientWidth;
+  setup(canvas, ctx, W, H); setup(card, cctx, CW, CH);
+  draw();
+}
+
+function dot(c, x, y, r, fill, ring) {
+  c.beginPath(); c.arc(x, y, r + ring, 0, 2 * Math.PI); c.fillStyle = COLOR.surface; c.fill();
+  c.beginPath(); c.arc(x, y, r, 0, 2 * Math.PI); c.fillStyle = fill; c.fill();
+}
+function resid(xs, ys, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  xs.forEach((x, i) => { ctx.beginPath(); ctx.moveTo(sx(x), sy(ys[i])); ctx.lineTo(sx(x), sy(predict(x))); ctx.stroke(); });
+}
+
+// ---------- 主圖 ----------
+function drawMain() {
+  ctx.fillStyle = COLOR.surface; ctx.fillRect(0, 0, W, H);
+  ctx.font = `12px ${FONT}`;
+  ctx.fillStyle = COLOR.ink2; ctx.strokeStyle = COLOR.grid; ctx.lineWidth = 1;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let y = 0; y <= D.ymax; y += 20) {
+    ctx.beginPath(); ctx.moveTo(PAD.l, sy(y)); ctx.lineTo(W - PAD.r, sy(y)); ctx.stroke();
+    ctx.fillText(y, PAD.l - 8, sy(y));
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let h = 8; h <= 22; h += 2) ctx.fillText(h + ":00", sx(h), H - PAD.b + 10);
+
+  if (showResid) exam ? resid(D.xt, D.yt, COLOR.testResid) : resid(D.x, D.y, COLOR.trainResid);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(PAD.l, PAD.t, W - PAD.l - PAD.r, H - PAD.t - PAD.b); ctx.clip();
+  ctx.strokeStyle = COLOR.curve; ctx.lineWidth = 2.5; ctx.lineJoin = "round";
+  ctx.beginPath();
+  for (let k = 0; k <= 400; k++) {
+    const x = D.xmin + (k / 400) * (D.xmax - D.xmin);
+    k ? ctx.lineTo(sx(x), sy(predict(x))) : ctx.moveTo(sx(x), sy(predict(x)));
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  if (exam) D.xt.forEach((x, i) => dot(ctx, sx(x), sy(D.yt[i]), 4, COLOR.test, 1.5));
+  D.x.forEach((x, i) => dot(ctx, sx(x), sy(D.y[i]), 5.5, COLOR.train, 2));
+  for (let i = 0; i < n; i++) dot(ctx, sx(p.c[i]), sy(predict(p.c[i])), 6, COLOR.bend, 2.5);
+}
+
+// ---------- 成績單：每個神經元數量的練習 / 實戰誤差 ----------
+let cardBars = [];
+function drawCard() {
+  cctx.fillStyle = COLOR.surface; cctx.fillRect(0, 0, CW, CH);
+  const ns = [...Array(D.maxN + 1).keys()];
+  const ymax = 30;
+  const ch = CH - CPAD.t - CPAD.b, cw = CW - CPAD.l - CPAD.r;
+  const gy = (v) => CPAD.t + (1 - Math.min(v, ymax) / ymax) * ch;
+  const slot = cw / ns.length, bw = Math.min(14, (slot - 8) / 2);
+  cctx.font = `12px ${FONT}`;
+  cctx.strokeStyle = COLOR.grid; cctx.lineWidth = 1; cctx.fillStyle = COLOR.ink2;
+  cctx.textAlign = "right"; cctx.textBaseline = "middle";
+  for (let v = 0; v <= ymax; v += 10) {
+    cctx.beginPath(); cctx.moveTo(CPAD.l, gy(v)); cctx.lineTo(CW - CPAD.r, gy(v)); cctx.stroke();
+    cctx.fillText(v, CPAD.l - 8, gy(v));
+  }
+  // 目前神經元數量的欄位底色
+  cctx.fillStyle = COLOR.band;
+  cctx.fillRect(CPAD.l + n * slot, CPAD.t, slot, ch);
+
+  // 實戰最佳
+  let best = -1;
+  if (exam) ns.forEach((k) => { if (records[k] && (best < 0 || records[k].test < records[best].test)) best = k; });
+
+  cardBars = [];
+  ns.forEach((k) => {
+    const cx = CPAD.l + (k + 0.5) * slot;
+    cctx.fillStyle = k === n ? COLOR.ink : COLOR.ink2;
+    cctx.textAlign = "center"; cctx.textBaseline = "top";
+    cctx.fillText(k, cx, CH - CPAD.b + 8);
+    const r = records[k];
+    if (!r) return;
+    const bars = [[r.train, COLOR.train, cx - bw - 1]];
+    if (exam) bars.push([r.test, COLOR.test, cx + 1]);
+    else bars[0][2] = cx - bw / 2;
+    bars.forEach(([v, color, x]) => {
+      const top = gy(v), h = CPAD.t + ch - top;
+      cctx.fillStyle = color;
+      cctx.beginPath(); cctx.roundRect(x, top, bw, Math.max(h, 1), [4, 4, 0, 0]); cctx.fill();
+    });
+    cardBars.push({ k, x0: cx - slot / 2, x1: cx + slot / 2 });
+    if (k === best) {
+      cctx.fillStyle = COLOR.test; cctx.textAlign = "center"; cctx.textBaseline = "bottom";
+      cctx.font = `600 12px ${FONT}`;
+      cctx.fillText("★ 實戰最佳", cx, gy(Math.max(r.train, r.test)) - 4);
+      cctx.font = `12px ${FONT}`;
+    }
+  });
+  cctx.fillStyle = COLOR.ink2; cctx.textAlign = "center"; cctx.textBaseline = "top";
+  cctx.fillText("神經元（彎折）數量", CPAD.l + cw / 2, CH - 16);
+}
+
+function draw() {
+  drawMain();
+  drawCard();
+  $(".score-train b").textContent = rmse(D.x, D.y).toFixed(1);
+  $(".score-test b").textContent = rmse(D.xt, D.yt).toFixed(1);
+}
+
+// ---------- 控制面板 ----------
+const panel = $(".controls");
+function slider(label, min, max, step, get, set) {
+  const row = document.createElement("label");
+  row.className = "row";
+  row.innerHTML = `<span class="lab">${label}</span><span class="val"></span><input type="range" min="${min}" max="${max}" step="${step}">`;
+  const input = row.querySelector("input"), val = row.querySelector(".val");
+  const sync = () => { input.value = get(); val.textContent = (+get()).toFixed(1); };
+  input.addEventListener("input", () => { if (busy) return; set(+input.value); val.textContent = (+input.value).toFixed(1); draw(); });
+  sync();
+  return { row, sync };
+}
+const rows = [
+  slider("早上 8 點的基本人數", 0, 100, 0.5, () => p.b, (v) => (p.b = v)),
+  slider("每過一小時，人數變化", -20, 20, 0.1, () => p.a, (v) => (p.a = v)),
+];
+rows.forEach((r) => panel.appendChild(r.row));
+const neuronRows = [];
+for (let i = 0; i < D.manualN; i++) {
+  const g = document.createElement("div");
+  g.className = "neuron";
+  g.innerHTML = `<div class="ntitle">神經元 ${i + 1}</div>`;
+  const rc = slider("從幾點開始彎", D.xmin, D.xmax, 0.1, () => p.c[i], (v) => (p.c[i] = v));
+  const rs = slider("彎多大力", -80, 80, 0.5, () => p.s[i], (v) => (p.s[i] = v));
+  g.append(rc.row, rs.row);
+  panel.appendChild(g);
+  neuronRows.push({ g, rc, rs });
+}
+const autoNote = document.createElement("div");
+autoNote.className = "auto-note";
+panel.appendChild(autoNote);
+
+const syncAll = () => {
+  rows.forEach((r) => r.sync());
+  neuronRows.forEach((r, i) => { r.rc.sync(); r.rs.sync(); r.g.style.display = i < n ? "" : "none"; });
+  const extra = n - D.manualN;
+  autoNote.style.display = extra > 0 ? "" : "none";
+  autoNote.textContent = `另外 ${extra} 個神經元太多了，只能交給機器學`;
+  $(".count").textContent = n;
+  $(".add").disabled = busy || n >= D.maxN;
+  $(".remove").disabled = busy || n <= 0;
+  element.querySelectorAll(".learn, .sweep, .phase button").forEach((b) => (b.disabled = busy));
+  $(".phase .practice").classList.toggle("on", !exam);
+  $(".phase .exam").classList.toggle("on", exam);
+  $(".score-test").style.display = exam ? "" : "none";
+  $(".legend-test").style.display = exam ? "" : "none";
+  $(".resid-label").textContent = exam ? "顯示每個實戰點猜錯多少（綠線）" : "顯示每個練習點猜錯多少（紅線）";
+};
+
+$(".add").addEventListener("click", () => { n++; syncAll(); draw(); });
+$(".remove").addEventListener("click", () => { n--; p.s[n] = 0; p.c[n] = D.params.c[n]; syncAll(); draw(); });
+$(".resid").addEventListener("change", (e) => { showResid = e.target.checked; draw(); });
+$(".phase .practice").addEventListener("click", () => { exam = false; syncAll(); draw(); });
+$(".phase .exam").addEventListener("click", () => { exam = true; syncAll(); draw(); });
+
+// ---------- 讓機器自己學：訓練完再把快照之間平滑內插成動畫 ----------
+const nextFrame = () => new Promise((ok) => setTimeout(ok, 30));  // 先讓按鈕文字更新再開始算
+let toastTimer;
+function toast(text) {
+  const t = $(".toast");
+  t.textContent = text; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.style.display = "none"), 4000);
+}
+function setParams(q) {
+  p.b = q.b; p.a = q.a;
+  for (let k = 0; k < D.maxN; k++) { p.c[k] = q.c[k]; p.s[k] = q.s[k]; }
+}
+$(".learn").addEventListener("click", async () => {
+  busy = true; syncAll();
+  $(".learn").textContent = "機器學習中…";
+  await nextFrame();
+  const { frames, restarted } = learn(p, n);
+  if (restarted) toast("原本的起點會讓機器卡住，它換了一個起點重新學");
+  const total = 2500, t0 = performance.now();
+  const lerp = (u, v, t) => u + (v - u) * t;
+  await new Promise((done) => {
+    function tick(now) {
+      // requestAnimationFrame 的時間戳可能早於 t0，夾在 0 以上避免取到負的影格
+      const f = Math.min(Math.max((now - t0) / total, 0), 1) * (frames.length - 1);
+      const i = Math.min(Math.floor(f), frames.length - 2), t = f - i;
+      const A = frames[i].params, B = frames[i + 1].params;
+      p.b = lerp(A.b, B.b, t); p.a = lerp(A.a, B.a, t);
+      for (let k = 0; k < D.maxN; k++) { p.c[k] = lerp(A.c[k], B.c[k], t); p.s[k] = lerp(A.s[k], B.s[k], t); }
+      draw(); syncAll();
+      f < frames.length - 1 ? requestAnimationFrame(tick) : done();
+    }
+    requestAnimationFrame(tick);
+  });
+  const last = frames[frames.length - 1];
+  records[n] = { train: last.train, test: last.test, params: JSON.parse(JSON.stringify(last.params)) };
+  busy = false; syncAll(); draw();
+  $(".learn").textContent = "讓機器自己學";
+});
+
+// ---------- 講師用：一鍵掃描 0–12 個神經元，逐欄長出成績單 ----------
+$(".sweep").addEventListener("click", async () => {
+  busy = true; syncAll();
+  $(".sweep").textContent = "掃描中…";
+  await nextFrame();
+  const results = sweep();
+  for (const r of results) {
+    records[r.n] = { train: r.train, test: r.test, params: r.params };
+    drawCard();
+    await new Promise((ok) => setTimeout(ok, 120));
+  }
+  busy = false; syncAll(); draw();
+  $(".sweep").textContent = "講師用：一鍵掃描 0–12 個神經元";
+});
+
+// ---------- 主圖：直接拖動彎折點、滑過資料點看提示 ----------
+let dragging = -1;
+const hitBend = (mx, my) => {
+  for (let i = 0; i < n; i++) if (Math.hypot(mx - sx(p.c[i]), my - sy(predict(p.c[i]))) < 14) return i;
+  return -1;
+};
+const fmtTime = (x) => { const m = Math.round(x * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+function showTip(text, x, y, host) {
+  tip.style.display = text ? "block" : "none";
+  tip.textContent = text;
+  const hostRect = host.getBoundingClientRect(), wrap = tip.parentElement.getBoundingClientRect();
+  tip.style.left = Math.min(x + hostRect.left - wrap.left + 14, wrap.width - 260) + "px";
+  tip.style.top = y + hostRect.top - wrap.top + 14 + "px";
+}
+function nearest(xs, ys, mx, my) {
+  let best = -1, bd = 12;
+  xs.forEach((x, i) => { const d = Math.hypot(mx - sx(x), my - sy(ys[i])); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+canvas.addEventListener("pointerdown", (e) => {
+  if (busy) return;
+  dragging = hitBend(e.offsetX, e.offsetY);
+  if (dragging >= 0) canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  const mx = e.offsetX, my = e.offsetY;
+  if (dragging >= 0) {
+    p.c[dragging] = Math.min(D.xmax, Math.max(D.xmin, invx(mx)));
+    if (dragging < D.manualN) neuronRows[dragging].rc.sync();
+    draw();
+  }
+  const b = dragging >= 0 ? dragging : hitBend(mx, my);
+  canvas.style.cursor = b >= 0 ? "ew-resize" : "default";
+  let text = "";
+  if (b >= 0) text = `神經元 ${b + 1}：從 ${fmtTime(p.c[b])} 開始彎（左右拖動）`;
+  else {
+    const i = nearest(D.x, D.y, mx, my);
+    const j = exam ? nearest(D.xt, D.yt, mx, my) : -1;
+    if (i >= 0) text = `練習｜${fmtTime(D.x[i])}　實際 ${D.y[i].toFixed(0)} 人　預測 ${predict(D.x[i]).toFixed(0)} 人`;
+    else if (j >= 0) text = `實戰｜${fmtTime(D.xt[j])}　實際 ${D.yt[j].toFixed(0)} 人　預測 ${predict(D.xt[j]).toFixed(0)} 人`;
+  }
+  showTip(text, mx, my, canvas);
+});
+canvas.addEventListener("pointerup", () => { dragging = -1; });
+canvas.addEventListener("pointerleave", () => { if (dragging < 0) tip.style.display = "none"; });
+
+// ---------- 成績單：滑過看數字、點一下載入那個模型 ----------
+const barAt = (mx) => cardBars.find((b) => mx >= b.x0 && mx < b.x1);
+card.addEventListener("pointermove", (e) => {
+  const b = barAt(e.offsetX);
+  card.style.cursor = b && !busy ? "pointer" : "default";
+  if (!b) return showTip("", 0, 0, card);
+  const r = records[b.k];
+  let text = `${b.k} 個神經元　練習猜錯 ${r.train.toFixed(1)} 人`;
+  if (exam) text += `　實戰猜錯 ${r.test.toFixed(1)} 人`;
+  showTip(text + "（點一下看這個模型）", e.offsetX, e.offsetY, card);
+});
+card.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+card.addEventListener("click", (e) => {
+  const b = barAt(e.offsetX);
+  if (!b || busy) return;
+  n = b.k; setParams(records[b.k].params);
+  syncAll(); draw();
+});
+
+new ResizeObserver(resize).observe(element.querySelector(".plot"));
+syncAll();
+resize();
+
+</script>
+</body>
+</html>
